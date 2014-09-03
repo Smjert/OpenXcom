@@ -391,6 +391,126 @@ void BLACK()
   }
 } /* BLACK */
 
+#ifndef MIN
+/* FIXME: Only works on expressions with no side effects */
+#define MIN(x,y) ((x)<(y)?(x):(y))
+#endif
+
+static void FlcWakeAudioWaiter(void)
+{
+  SDL_SemPost(flc.audioWaiter);
+}
+
+static void FlcWaitForNextAudioFrame(void)
+{
+  SDL_SemWait(flc.audioWaiter);
+}
+
+void FlcAudioCallback(void *userData, Uint8 *stream, int len)
+{
+   struct Flc_t *f = (struct Flc_t*)userData;
+   int b = f->playingSampleBuffer;
+   size_t samplesToCopy = MIN(len, f->sampleCount[b] - f->samplePosition[b]);
+   memcpy(stream, &f->samples[b][f->samplePosition[b]], samplesToCopy);
+   f->samplePosition[b] += samplesToCopy;
+   if (len > samplesToCopy) {
+     /* Need to swap buffers */
+	 size_t samplesCopied = samplesToCopy;
+	 f->playingSampleBuffer = (f->playingSampleBuffer+1)%2;
+	 b = f->playingSampleBuffer;
+	 assert(f->samplePosition[b] == 0);
+	 samplesToCopy = MIN(len - samplesCopied, f->sampleCount[b]);
+	 memcpy(stream + samplesCopied, &f->samples[b][0], samplesToCopy);
+	 f->samplePosition[b] += samplesToCopy;
+
+	 /* We use the audio thread as sync - when we progress over the end of the  */
+	 FlcWakeAudioWaiter();
+   }
+}
+
+void FlcInitAudio(int sampleRate, Uint16 format, Uint8 channels)
+{
+	int err;
+	memset(&flc.requestedAudioSpec, 0, sizeof(flc.requestedAudioSpec));
+	memset(&flc.returnedAudioSpec, 0, sizeof(flc.returnedAudioSpec));
+	flc.requestedAudioSpec.freq = sampleRate;
+	flc.requestedAudioSpec.channels = channels;
+	flc.requestedAudioSpec.format = format;
+	flc.requestedAudioSpec.callback = FlcAudioCallback;
+	flc.requestedAudioSpec.userdata = &flc;
+	/* Arbitrary buffer size of 8k */
+	flc.requestedAudioSpec.samples = (1ul<<12);
+
+	err = SDL_OpenAudio(&flc.requestedAudioSpec, &flc.returnedAudioSpec);
+
+	if (err)
+	{
+		printf("Failed to open audio (%d)\n", err);
+		return;
+	}
+
+	/* We do not support channel/format/frequency changing */
+	assert(flc.returnedAudioSpec.format == flc.requestedAudioSpec.format);
+	assert(flc.returnedAudioSpec.freq == flc.requestedAudioSpec.freq);
+	assert(flc.returnedAudioSpec.channels == flc.requestedAudioSpec.channels);
+
+	/* Start runnable */
+	flc.audioWaiter = SDL_CreateSemaphore(1);
+
+}
+
+void FlcDeInitAudio(void)
+{
+	SDL_PauseAudio(1);
+	SDL_CloseAudio();
+	if (flc.samples[0]) {
+		free(flc.samples[0]);
+		flc.samples[0] = NULL;
+	}
+	if (flc.samples[1]) {
+		free(flc.samples[1]);
+		flc.samples[1] = NULL;
+	}
+	SDL_DestroySemaphore(flc.audioWaiter);
+
+}
+
+void DECODE_TFTD_AUDIO(size_t chunkSize)
+{
+  /* TFTD audio header (10 bytes)
+   * Uint16 unknown1 - always 0
+   * Uint16 sampleRate
+   * Uint16 unknown2 - always 1 (Channels? bytes per sample?)
+   * Uint16 unknown3 - always 10 (No idea)
+   * Uint16 unknown4 - always 0
+   * Uint8[] unsigned 1-byte 1-channel PCM data of length _chunkSize_ (so the total chunk is _chunkSize_ + 6-byte flc header + 10 byte audio header */
+  Uint16 sampleRate;
+  ReadU16(&sampleRate, flc.pChunk+8);
+  int loadingSampleBuffer = (flc.playingSampleBuffer + 1)  % 2;
+
+  if (chunkSize != flc.sampleCount[loadingSampleBuffer]) {
+    /* If the sample count has changed, we need to reallocate (Handles initial state
+	 * of '0' sample count too, as realloc(NULL, size) == malloc(size) */
+	flc.samples[loadingSampleBuffer] = (char*)realloc(flc.samples[loadingSampleBuffer], chunkSize);
+	flc.sampleCount[loadingSampleBuffer] = chunkSize;
+  }
+
+  /* Copy the data.... */
+  memcpy(flc.samples[loadingSampleBuffer], flc.pChunk+16, chunkSize);
+  /* And reset the position to the beginning */
+  flc.samplePosition[loadingSampleBuffer] = 0;
+
+  /* Start the music! */
+  if (!flc.hasAudio) {
+	flc.hasAudio = true;
+	flc.sampleRate = sampleRate;
+	FlcInitAudio(sampleRate, AUDIO_U8, 1);
+  } else {
+	/* Cannot change sample rate mid-video */
+	assert(sampleRate == flc.sampleRate);
+  }
+
+}
 
 void FlcDoOneFrame()
 { int ChunkCount; 
@@ -436,6 +556,12 @@ void FlcDoOneFrame()
         printf("Chunk 18 not yet done.\n");
 #endif
       break;
+      case 0xaaaa:
+	    DECODE_TFTD_AUDIO(flc.ChunkSize);
+		/* EVIL HACK - the tftd audio chunk lies about it's size, it does not
+		 * take into account the 6-byte flc header plus the 10 byte audio header*/
+		flc.pChunk += 16;
+		break;
       default:
         Log(LOG_WARNING) << "Ieek an non implemented chunk type:" << flc.ChunkType;
     }
@@ -533,8 +659,11 @@ void FlcMain(void (*frameCallBack)())
     FlcReadFile(flc.FrameSize);
 
 	if(flc.FrameCheck!=SDL_SwapLE16(0x0f100)) {
-      FlcDoOneFrame();
-      SDLWaitFrame();
+	  FlcDoOneFrame();
+	  if (flc.hasAudio)
+	    FlcWaitForNextAudioFrame();
+	  else
+        SDLWaitFrame();
       /* TODO: Track which rectangles have really changed */
       //SDL_UpdateRect(flc.mainscreen, 0, 0, 0, 0);
       if (flc.mainscreen != flc.realscreen->getSurface()->getSurface())
@@ -580,6 +709,8 @@ void FlcMain(void (*frameCallBack)())
 	} while (!flc.quit && finalFrame && SDL_GetTicks() - pauseStart < 10000); // 10 sec pause but we're actually just fading out and going to main menu when the music ends
 	if (finalFrame) flc.quit = true;
   }
+  if (flc.hasAudio)
+    FlcDeInitAudio();
 //#endif
 } /* FlcMain */
 

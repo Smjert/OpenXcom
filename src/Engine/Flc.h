@@ -71,6 +71,19 @@ struct Flc_t {
   int dx, dy;
   int offset;
   bool quit;
+  bool hasAudio;
+
+  /* Double buffer audio, so one is playing, the other can be loaded */
+  int playingSampleBuffer;
+  size_t sampleCount[2];
+  char *samples[2];
+  size_t samplePosition[2];
+  Uint16 sampleRate;
+
+  SDL_AudioSpec requestedAudioSpec;
+  SDL_AudioSpec returnedAudioSpec;
+
+  SDL_sem *audioWaiter;
 };
 
 extern struct Flc_t flc;
