@@ -22,7 +22,7 @@
 #include "../Engine/Logger.h"
 #include "../Engine/Game.h"
 #include "../Engine/Options.h"
-#include "../Engine/Flc.h"
+#include "../Engine/FlcPlayer.h"
 #include "../Engine/CrossPlatform.h"
 #include "../Engine/Screen.h"
 #include "../Engine/Music.h"
@@ -317,25 +317,21 @@ static introSoundEffect introSoundTrack[] =
 };
 
 
-static void musicDone()
-{
-	Flc::flc.quit = true;
-}
-
 static struct AudioSequence
 {
 	ResourcePack *rp;
 	Music *m;
 	Sound *s;
 	int trackPosition;
+	FlcPlayer *_flcPlayer;
 
-	AudioSequence(ResourcePack *resources) : rp(resources), m(0), s(0), trackPosition(0)
+	AudioSequence(ResourcePack *resources, FlcPlayer *flcPlayer) : rp(resources), m(0), s(0), trackPosition(0), _flcPlayer(flcPlayer)
 	{
 	}
 
 	void operator ()()
 	{
-		while (Flc::flc.FrameCount >= introSoundTrack[trackPosition].frameNumber)
+		while (_flcPlayer->getFrameCount() >= introSoundTrack[trackPosition].frameNumber)
 		{
 			int command = introSoundTrack[trackPosition].sound;
 
@@ -358,15 +354,16 @@ static struct AudioSequence
 					Log(LOG_DEBUG) << "Playing gmintro3";
 					m = rp->getMusic("GMINTRO3");
 					m->play(1);
-					Mix_HookMusicFinished(musicDone);
+					//Mix_HookMusicFinished(_FlcPlayer::stop);
 					break;
 				}
 #endif		
 			}
 			else if (command & 0x400)
 			{
-				Flc::flc.HeaderSpeed = (1000.0/70.0) * (command & 0xff);
-				Log(LOG_DEBUG) << "Frame delay now: " << Flc::flc.HeaderSpeed;
+				int newSpeed = (command & 0xff);
+				_flcPlayer->setHeaderSpeed(newSpeed);
+				Log(LOG_DEBUG) << "Frame delay now: " << newSpeed;
 			}
 			else if (command <= 0x19)
 			{
@@ -407,14 +404,13 @@ void IntroState::init()
 	Options::keepAspectRatio = _wasLetterBoxed;
 	if (CrossPlatform::fileExists(_introFile) && (CrossPlatform::fileExists(_introSoundFileDOS) || CrossPlatform::fileExists(_introSoundFileWin)))
 	{
-		audioSequence = new AudioSequence(_game->getResourcePack());
-		Flc::flc.realscreen = _game->getScreen();
-		Flc::FlcInit(_introFile.c_str());
-		Flc::flc.dx = (Options::baseXResolution - Screen::ORIGINAL_WIDTH) / 2;
-		Flc::flc.dy = (Options::baseYResolution - Screen::ORIGINAL_HEIGHT) / 2;
-		Flc::flc.loop = 0; // just the one time, please
-		Flc::FlcMain(&audioHandler);
-		Flc::FlcDeInit();
+		_flcPlayer = new FlcPlayer();
+		audioSequence = new AudioSequence(_game->getResourcePack(), _flcPlayer);
+		int dx = (Options::baseXResolution - Screen::ORIGINAL_WIDTH) / 2;
+		int dy = (Options::baseYResolution - Screen::ORIGINAL_HEIGHT) / 2;
+		_flcPlayer->init(_introFile.c_str(), 0/*&audioHandler*/, _game, dx, dy);
+		_flcPlayer->play();
+		delete _flcPlayer;
 		delete audioSequence;
 
 
