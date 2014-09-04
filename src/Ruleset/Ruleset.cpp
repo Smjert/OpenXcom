@@ -66,6 +66,7 @@
 #include "StatString.h"
 #include "RuleGlobe.h"
 #include "../Resource/ResourcePack.h"
+#include "Video.h"
 
 namespace OpenXcom
 {
@@ -198,6 +199,10 @@ Ruleset::~Ruleset()
 		delete i->second;
 	}
 	for (std::map<std::string, RuleInterface *>::const_iterator i = _interfaces.begin (); i != _interfaces.end (); ++i)
+	{
+		delete i->second;
+	}
+	for (std::map<std::string, Video *>::const_iterator i = _videos.begin(); i != _videos.end(); ++i)
 	{
 		delete i->second;
 	}
@@ -564,6 +569,14 @@ void Ruleset::loadFile(const std::string &filename)
 		ResourcePack::UFO_EXPLODE = (*i)["ufoExplode"].as<int>(ResourcePack::UFO_EXPLODE);
 		ResourcePack::INTERCEPTOR_HIT = (*i)["intterceptorHit"].as<int>(ResourcePack::INTERCEPTOR_HIT);
 		ResourcePack::INTERCEPTOR_EXPLODE = (*i)["interceptorExplode"].as<int>(ResourcePack::INTERCEPTOR_EXPLODE);
+	}
+	for (YAML::const_iterator i = doc["videos"].begin(); i != doc["videos"].end(); ++i)
+	{
+		Video *rule = loadRule(*i, &_videos);
+		if (rule != 0)
+		{
+			rule->load(*i);
+		}
 	}
 	// refresh _psiRequirements for psiStrengthEval
 	for (std::vector<std::string>::const_iterator i = _facilitiesIndex.begin(); i != _facilitiesIndex.end(); ++i)
@@ -1480,6 +1493,11 @@ RuleGlobe *Ruleset::getGlobe() const
 const std::map<std::string, SoundDefinition *> *Ruleset::getSoundDefinitions() const
 {
 	return &_soundDefs;
+}
+
+const std::map<std::string, Video *> *Ruleset::getVideos() const
+{
+	return &_videos;
 }
 
 }

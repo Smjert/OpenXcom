@@ -516,6 +516,8 @@ set ( ruleset_src
   Ruleset/Polyline.cpp
   Ruleset/RuleGlobe.h
   Ruleset/RuleGlobe.cpp
+  Ruleset/Video.h
+  Ruleset/Video.cpp
 )
 
 set ( savegame_src

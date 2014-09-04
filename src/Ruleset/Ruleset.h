@@ -62,6 +62,7 @@ class StatString;
 class RuleInterface;
 class RuleGlobe;
 class SoundDefinition;
+class Video;
 
 /**
  * Set of rules and stats for a game.
@@ -95,6 +96,7 @@ protected:
 	std::map<std::string, RuleAlienMission *> _alienMissions;
 	std::map<std::string, RuleInterface *> _interfaces;
 	std::map<std::string, SoundDefinition *> _soundDefs;
+	std::map<std::string, Video *>_videos;
 	std::map<std::string, MCDPatch *> _MCDPatches;
 	std::vector<std::pair<std::string, ExtraSprites *> > _extraSprites;
 	std::vector<std::pair<std::string, ExtraSounds *> > _extraSounds;
@@ -243,6 +245,8 @@ public:
 	RuleGlobe *getGlobe() const;
 	/// Gets the list of selective files for insertion into our cat files.
 	const std::map<std::string, SoundDefinition *> *getSoundDefinitions() const;
+	/// Gets the list videos for intro/outro etc.
+	const std::map<std::string, Video *> *getVideos() const;
 };
 
 }
