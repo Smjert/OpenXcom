@@ -486,9 +486,7 @@ void FlcPlayer::color256()
 			_colors[i].b = *(pSrc++);
 		}
 
-		_realScreen->setPalette(_colors, numColorsSkip, numColors);
-		SDL_SetColors(_mainScreen, _colors, numColorsSkip, numColors);
-		_realScreen->getSurface(); // force palette update to really happen
+		_realScreen->setPalette(_colors, numColorsSkip, numColors, true);
 	}
 }
 
@@ -594,11 +592,6 @@ void FlcPlayer::fliBRun()
 			if (CountData > 0) 
 			{
 				Fill = *(pSrc++);
-				/*while (CountData--) 
-				{
-					*(pTmpDst++) = Fill;
-					++pixels;
-				}*/
 
 				std::fill_n(pTmpDst, CountData, Fill);
 				pTmpDst += CountData;
@@ -608,7 +601,6 @@ void FlcPlayer::fliBRun()
 			{
 				if (CountData < 0) 
 				{
-					//CountData = (0x100 - CountData);
 					CountData = -CountData;
 
 					std::copy(pSrc, pSrc + CountData, pTmpDst);
@@ -663,7 +655,7 @@ void FlcPlayer::fliLC()
 				if (CountData < 0) 
 				{
 					CountData = -CountData;
-					//CountData = (0x100 - CountData);
+
 					Fill = *(pSrc++);
 					while (CountData--) 
 					{
@@ -704,9 +696,7 @@ void FlcPlayer::color64()
 			_colors[i].b = *(pSrc++) << 2;
 		}
 
-		_realScreen->setPalette(_colors, NumColorsSkip, NumColors);
-		SDL_SetColors(_mainScreen, _colors, NumColorsSkip, NumColors);
-		_realScreen->getSurface(); // force palette update to really happen
+		_realScreen->setPalette(_colors, NumColorsSkip, NumColors, true);
 	}
 }
 
