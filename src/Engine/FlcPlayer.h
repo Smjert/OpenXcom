@@ -103,6 +103,8 @@ private:
 
 	void readU16(Uint16 &dst, const Uint8 *const src);
 	void readU32(Uint32 &dst, const Uint8 *const src);
+	void readS16(Sint16 &dst, const Sint8 *const src);
+	void readS32(Sint32 &dst, const Sint8 *const src);
 	void readFileHeader();
 
 	bool isValidFrame(Uint8 *frameHeader, Uint32 &frameSize, Uint16 &frameType);

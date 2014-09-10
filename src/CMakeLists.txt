@@ -236,8 +236,8 @@ set ( engine_src
   Engine/LocalizedText.h
   Engine/FastLineClip.cpp
   Engine/FastLineClip.h
-  Engine/Flc.cpp
-  Engine/Flc.h
+  Engine/FlcPlayer.cpp
+  Engine/FlcPlayer.h
   Engine/Zoom.cpp
   Engine/Zoom.h
   Engine/ShaderDraw.h

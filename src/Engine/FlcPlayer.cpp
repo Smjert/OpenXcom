@@ -161,6 +161,9 @@ void FlcPlayer::play()
 	_quit = false;
 	bool finalFrame = false;
 
+	// Vertically center the video
+	_dy = (_mainScreen->h - _headerHeight) / 2;
+
 	_offset = _dy * _mainScreen->pitch + _mainScreen->format->BytesPerPixel * _dx;
 
 	// Skip file header
@@ -183,7 +186,6 @@ void FlcPlayer::play()
 			pauseStart = SDL_GetTicks();
 			finalFrame = true;
 		}
-		++_frameCount;
 
 		do
 		{
@@ -362,10 +364,11 @@ void FlcPlayer::decodeVideo()
 
 void FlcPlayer::playVideoFrame()
 {
-	
+	++_frameCount;
 	if (SDL_LockSurface(_mainScreen) < 0)
 		return;
 	int chunkCount = _frameChunks;
+
 	for (int i = 0; i < chunkCount; ++i)
 	{
 		readU32(_chunkSize, _chunkData);
@@ -471,7 +474,7 @@ void FlcPlayer::color256()
 	{
 		numColorsSkip = *(pSrc++);
 		numColors = *(pSrc++);
-		if (numColors <= 0)
+		if (numColors == 0)
 		{
 			numColors = 256;
 		}
@@ -494,36 +497,36 @@ void FlcPlayer::fliSS2()
 	Uint8 *pSrc, *pDst, *pTmpDst;
 	Sint8 CountData;
 	Uint8 ColumSkip, Fill1, Fill2;
-	Uint16 Lines, Count;
+	Uint16 Lines;
+	Sint16 Count;
+	bool setLastByte = false;
+	Uint8 lastByte = 0;
 
 	pSrc = _chunkData + 6;
 	pDst = (Uint8*)_mainScreen->pixels + _offset;
 	readU16(Lines, pSrc);
 
 	pSrc += 2;
+
 	while (Lines--) 
 	{
-		readU16(Count, pSrc);
+		readS16(Count, (Sint8 *)pSrc);
 		pSrc += 2;
 
-		while (Count & 0xc000) 
-		{
-			/* Upper bits 11 - Lines skip
-			*/
-			if ((Count & 0xc000) == 0xc000) // 0xc000h = 1100000000000000
-			{  
-				pDst += (0x10000 - Count)*_mainScreen->pitch;
-			}
+		if ((Count & 0xc000) == 0xc000) // 0xc000h = 1100000000000000
+		{  
+			pDst += (-Count)*_mainScreen->pitch;
+			++Lines;
+			continue;
+		}
 			
-			if ((Count & 0xc000) == 0x4000) // 0x4000h = 0100000000000000
-			{  
-				/* Upper bits 01 - Last pixel
-				*/
-#ifdef DEBUG
-				printf("Last pixel not implemented");
-#endif
-			}
-			readU16(Count, pSrc);
+		else if ((Count & 0x8000) == 0x8000) // 0x8000h = 1000000000000000
+		{  
+			/* Upper bits 01 - Last pixel
+			*/
+			setLastByte = true;
+			lastByte = (Count & 0x00FF);
+			readS16(Count, (Sint8 *)pSrc);
 			pSrc += 2;
 		}
 
@@ -535,14 +538,9 @@ void FlcPlayer::fliSS2()
 				ColumSkip = *(pSrc++);
 				pTmpDst += ColumSkip;
 				CountData = *(pSrc++);
+
 				if (CountData > 0) 
 				{
-					/*while (CountData--) 
-					{
-						*(pTmpDst++) = *(pSrc++);
-						*(pTmpDst++) = *(pSrc++);
-					}*/
-
 					std::copy(pSrc, pSrc + (2 * CountData), pTmpDst);
 					pTmpDst += (2 * CountData);
 					pSrc += (2 * CountData);
@@ -552,7 +550,7 @@ void FlcPlayer::fliSS2()
 					if (CountData < 0) 
 					{
 						CountData = -CountData;
-						//CountData = (0x100 - CountData);
+
 						Fill1 = *(pSrc++);
 						Fill2 = *(pSrc++);
 						while (CountData--)
@@ -562,6 +560,12 @@ void FlcPlayer::fliSS2()
 						}
 					}
 				}
+			}
+
+			if (setLastByte)
+			{
+				setLastByte = false;
+				*(pDst + _mainScreen->pitch - 1) = lastByte;
 			}
 			pDst += _mainScreen->pitch;
 		}
@@ -862,8 +866,13 @@ void FlcPlayer::waitForNextFrame(Uint32 delay)
 	int currentTick;
 
 	currentTick = SDL_GetTicks();
-	if (oldTick == 0) oldTick = currentTick;
-	newTick = oldTick + delay;
+	if (oldTick == 0)
+	{
+		oldTick = currentTick;
+		newTick = oldTick;
+	}
+	else
+		newTick = oldTick + delay;
 
 	if (_hasAudio)
 	{
@@ -898,12 +907,28 @@ inline void FlcPlayer::readU32(Uint32 &dst, const Uint8 * const src)
 {
 	dst = (src[0] << 24) | (src[1] << 16) | (src[2] << 8) | src[3];
 }
+inline void FlcPlayer::readS16(Sint16 &dst, const Sint8 * const src)
+{
+	dst = (src[0] << 8) | src[1];
+}
+inline void FlcPlayer::readS32(Sint32 &dst, const Sint8 * const src)
+{
+	dst = (src[0] << 24) | (src[1] << 16) | (src[2] << 8) | src[3];
+}
 #else
 inline void FlcPlayer::readU16(Uint16 &dst, const Uint8 * const src)
 {
 	dst = (src[1] << 8) | src[0];
 }
 inline void FlcPlayer::readU32(Uint32 &dst, const Uint8 * const src)
+{
+	dst = (src[3] << 24) | (src[2] << 16) | (src[1] << 8) | src[0];
+}
+inline void FlcPlayer::readS16(Sint16 &dst, const Sint8 * const src)
+{
+	dst = (src[1] << 8) | src[0];
+}
+inline void FlcPlayer::readS32(Sint32 &dst, const Sint8 * const src)
 {
 	dst = (src[3] << 24) | (src[2] << 16) | (src[1] << 8) | src[0];
 }
