@@ -42,7 +42,7 @@ private:
 	Uint8 *_chunkData;
 	Uint8 *_audioFrameData;
 
-	Uint16 _frameCount;    /// Frame Counter
+  Uint16 _frameCount;    /* Frame Counter */
 	Uint32 _headerSize;    /* Fli file size */
 	Uint16 _headerType;    /* Fli header check */
 	Uint16 _headerFrames;  /* Number of frames in flic */
@@ -80,7 +80,7 @@ private:
 		int sampleCount;
 		int sampleBufSize;
 		int currSamplePos;
-	};
+  }AudioBuffer;
 
 	typedef struct AudioData
 	{
@@ -108,7 +108,7 @@ private:
 	void readFileHeader();
 
 	bool isValidFrame(Uint8 *frameHeader, Uint32 &frameSize, Uint16 &frameType);
-	void decodeVideo();
+  void decodeVideo(bool skipLastFrame);
 	void decodeAudio(int frames);
 	void waitForNextFrame(Uint32 delay);
 	void SDLPolling();
@@ -140,11 +140,13 @@ public:
 	/// Open FLC or FLI file, read header, prepare to play it
 	bool init(const char *filename, void(*frameCallBack)(), Game *game, int dx, int dy);
 	/// Play the loaded file; set flc.mainScreen first!
-	void play();
+  void play(bool skipLastFrame);
 	/// Free memory, free love, etc.
 	void deInit();
-
-	void stop();
+  /// Stop FLC Player
+  void stop();
+  /// Delay player at the end
+  void delay(int milliseconds);
 	void setHeaderSpeed(int speed);
 	int getFrameCount();
 };

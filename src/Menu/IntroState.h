@@ -30,7 +30,8 @@ class FlcPlayer;
 class IntroState : public State
 {
 private:
-	std::string _introFile, _introSoundFileDOS, _introSoundFileWin;
+  std::vector<std::string> _introFiles;
+  std::string _introSoundFileDOS, _introSoundFileWin;
 	bool _wasLetterBoxed;
 	int _oldMusic, _oldSound;
 	FlcPlayer *_flcPlayer;
@@ -41,6 +42,7 @@ public:
 	~IntroState();
 	/// Starts the intro.
 	void init();
+  void end();
 };
 
 }

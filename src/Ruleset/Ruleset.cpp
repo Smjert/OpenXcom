@@ -66,7 +66,7 @@
 #include "StatString.h"
 #include "RuleGlobe.h"
 #include "../Resource/ResourcePack.h"
-#include "Video.h"
+#include "RuleVideo.h"
 
 namespace OpenXcom
 {
@@ -228,7 +228,7 @@ void Ruleset::load(const std::string &source)
  */
 void Ruleset::loadFile(const std::string &filename)
 {
-	YAML::Node doc = YAML::LoadFile(filename);
+  YAML::Node doc = YAML::LoadFile(filename);
 
 	for (YAML::const_iterator i = doc["countries"].begin(); i != doc["countries"].end(); ++i)
 	{
@@ -570,9 +570,9 @@ void Ruleset::loadFile(const std::string &filename)
 		ResourcePack::INTERCEPTOR_HIT = (*i)["intterceptorHit"].as<int>(ResourcePack::INTERCEPTOR_HIT);
 		ResourcePack::INTERCEPTOR_EXPLODE = (*i)["interceptorExplode"].as<int>(ResourcePack::INTERCEPTOR_EXPLODE);
 	}
-	for (YAML::const_iterator i = doc["videos"].begin(); i != doc["videos"].end(); ++i)
+  for (YAML::const_iterator i = doc["cutscenes"].begin(); i != doc["cutscenes"].end(); ++i)
 	{
-		Video *rule = loadRule(*i, &_videos);
+    Video *rule = loadRule(*i, &_videos, 0, "id");
 		if (rule != 0)
 		{
 			rule->load(*i);

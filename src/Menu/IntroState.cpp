@@ -28,6 +28,8 @@
 #include "../Engine/Music.h"
 #include "../Engine/Sound.h"
 #include "../Resource/ResourcePack.h"
+#include "../Ruleset/Ruleset.h"
+#include "../Ruleset/RuleVideo.h"
 #include "MainMenuState.h"
 
 namespace OpenXcom
@@ -44,7 +46,20 @@ IntroState::IntroState(bool wasLetterBoxed) : _wasLetterBoxed(wasLetterBoxed)
 	_oldSound = Options::soundVolume;
 	Options::musicVolume = Options::soundVolume = std::max(_oldMusic, _oldSound);
 	_game->setVolume(Options::soundVolume, Options::musicVolume, -1);
-	_introFile = CrossPlatform::getDataFile("UFOINTRO/UFOINT.FLI");
+
+  const Ruleset *rules = _game->getRuleset();
+  const std::map<std::string, Video*> *videoRulesets = rules->getVideos();
+
+
+  const Video *videoRule = videoRulesets->find("RES_INTRO")->second;
+  const std::vector<std::string> *videos = videoRule->getVideos();
+
+  std::vector<std::string>::const_iterator it;
+  for(it = videos->begin(); it != videos->end(); ++it)
+  {
+    _introFiles.push_back(CrossPlatform::getDataFile(*it));
+  }
+
 	_introSoundFileDOS = CrossPlatform::getDataFile("SOUND/INTRO.CAT");
 	_introSoundFileWin = CrossPlatform::getDataFile("SOUND/SAMPLE3.CAT");
 }
@@ -402,58 +417,96 @@ void IntroState::init()
 {
 	State::init();
 	Options::keepAspectRatio = _wasLetterBoxed;
-	if (CrossPlatform::fileExists(_introFile) && (CrossPlatform::fileExists(_introSoundFileDOS) || CrossPlatform::fileExists(_introSoundFileWin)))
-	{
-		_flcPlayer = new FlcPlayer();
-		audioSequence = new AudioSequence(_game->getResourcePack(), _flcPlayer);
-		int dx = (Options::baseXResolution - Screen::ORIGINAL_WIDTH) / 2;
-		int dy = (Options::baseYResolution - Screen::ORIGINAL_HEIGHT) / 2;
-		_flcPlayer->init(_introFile.c_str(), 0/*&audioHandler*/, _game, dx, dy);
-		_flcPlayer->play();
-		delete _flcPlayer;
-		delete audioSequence;
+  int videoFilesNum = _introFiles.size();
 
+  bool oldVideoFile = false;
+  if(videoFilesNum > 0)
+  {
+    // Might be old video file
+    if (videoFilesNum == 1 && (CrossPlatform::fileExists(_introSoundFileDOS) || CrossPlatform::fileExists(_introSoundFileWin)))
+      oldVideoFile = true;
 
-#ifndef __NO_MUSIC
-		// fade out!
-		Mix_FadeOutChannel(-1, 45 * 20);
-		if (Mix_GetMusicType(0) != MUS_MID) { Mix_FadeOutMusic(45 * 20); func_fade(); } // SDL_Mixer has trouble with native midi and volume on windows, which is the most likely use case, so f@%# it.
-		else { Mix_HaltMusic(); }
-#endif
+    int dx = (Options::baseXResolution - Screen::ORIGINAL_WIDTH) / 2;
+    int dy = (Options::baseYResolution - Screen::ORIGINAL_HEIGHT) / 2;
 
-		SDL_Color pal[256];
-		SDL_Color pal2[256];
-		memcpy(pal, _game->getScreen()->getPalette(), sizeof(SDL_Color) * 256);
-		for (int i = 20; i > 0; --i)
-		{
-			SDL_Event event;
-			if (SDL_PollEvent(&event) && event.type == SDL_KEYDOWN) break;
-			for (int color = 0; color < 256; ++color)
-			{
-				pal2[color].r = (((int)pal[color].r) * i) / 20;
-				pal2[color].g = (((int)pal[color].g) * i) / 20;
-				pal2[color].b = (((int)pal[color].b) * i) / 20;
-				pal2[color].unused = pal[color].unused;
-			}
-			_game->getScreen()->setPalette(pal2, 0, 256, true);
-			_game->getScreen()->flip();
-			SDL_Delay(45);
-		}
-		_game->getScreen()->clear();
-		_game->getScreen()->flip();
-		Options::musicVolume = _oldMusic;
-		Options::soundVolume = _oldSound;
-		_game->setVolume(Options::soundVolume, Options::musicVolume, Options::uiVolume);
+    if(oldVideoFile)
+    {
+      std::string videoFileName = _introFiles[0];
+      if (CrossPlatform::fileExists(videoFileName))
+      {
+          _flcPlayer = new FlcPlayer();
+          audioSequence = new AudioSequence(_game->getResourcePack(), _flcPlayer);
+          _flcPlayer->init(videoFileName.c_str(), &audioHandler, _game, dx, dy);
+          _flcPlayer->play(true);
+          _flcPlayer->delay(10000);
+          delete _flcPlayer;
+          delete audioSequence;
+          end();
+      }
+    }
+    else
+    {
+      std::vector<std::string>::const_iterator it;
+      _flcPlayer = new FlcPlayer();
+      for(it = _introFiles.begin(); it != _introFiles.end(); ++it)
+      {
+        std::string videoFileName = *it;
 
-#ifndef __NO_MUSIC
-		Sound::stop();
-		Music::stop();
-#endif
-	}
+        if (CrossPlatform::fileExists(videoFileName))
+        {
+          _flcPlayer->init(videoFileName.c_str(), 0, _game, dx, dy);
+          _flcPlayer->play(false);
+          _flcPlayer->deInit();
+        }
+      }
+      delete _flcPlayer;
+      end();
+    }
+  }
+  else // TODO: slides
+  {
+  }
 	Screen::updateScale(Options::geoscapeScale, Options::geoscapeScale, Options::baseXGeoscape, Options::baseYGeoscape, true);
 	_game->getScreen()->resetDisplay(false);
 	_game->setState(new MainMenuState);
 }
 
-}
+void IntroState::end()
+{
+#ifndef __NO_MUSIC
+    // fade out!
+    Mix_FadeOutChannel(-1, 45 * 20);
+    if (Mix_GetMusicType(0) != MUS_MID) { Mix_FadeOutMusic(45 * 20); func_fade(); } // SDL_Mixer has trouble with native midi and volume on windows, which is the most likely use case, so f@%# it.
+    else { Mix_HaltMusic(); }
+#endif
 
+    SDL_Color pal[256];
+    SDL_Color pal2[256];
+    memcpy(pal, _game->getScreen()->getPalette(), sizeof(SDL_Color) * 256);
+    for (int i = 20; i > 0; --i)
+    {
+      SDL_Event event;
+      if (SDL_PollEvent(&event) && event.type == SDL_KEYDOWN) break;
+      for (int color = 0; color < 256; ++color)
+      {
+        pal2[color].r = (((int)pal[color].r) * i) / 20;
+        pal2[color].g = (((int)pal[color].g) * i) / 20;
+        pal2[color].b = (((int)pal[color].b) * i) / 20;
+        pal2[color].unused = pal[color].unused;
+      }
+      _game->getScreen()->setPalette(pal2, 0, 256, true);
+      _game->getScreen()->flip();
+      SDL_Delay(45);
+    }
+    _game->getScreen()->clear();
+    _game->getScreen()->flip();
+    Options::musicVolume = _oldMusic;
+    Options::soundVolume = _oldSound;
+    _game->setVolume(Options::soundVolume, Options::musicVolume, Options::uiVolume);
+
+#ifndef __NO_MUSIC
+    Sound::stop();
+    Music::stop();
+#endif
+}
+}

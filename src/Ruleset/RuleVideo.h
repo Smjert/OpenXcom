@@ -22,19 +22,21 @@
 #include <yaml-cpp/yaml.h>
 #include <vector>
 #include <string>
+#include <map>
 
 namespace OpenXcom
 {
 class Video
 {
 private:
-	std::string _type;
-	std::string _file;
+  std::string _id;
+  std::vector<std::string> _videos;
+  //std::vector<std::string> _slides;
 public:
 	Video(const std::string &type);
 	~Video();
 	void load(const YAML::Node &node);
-	const std::string getFileName() const;
+  const std::vector<std::string> * getVideos() const;
 
 };
 
